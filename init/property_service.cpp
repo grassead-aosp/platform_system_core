@@ -517,11 +517,39 @@ void load_recovery_id_prop() {
     close(fd);
 }
 
+/* When booting from sd, all Variscite iMX6 SoMs use mmcblk1.
+ * When booting from emmc, VAR-DART uses mmcblk2 while all the other
+ * Variscite iMX6 SoMs use mmcblk0.
+ * Althought this info is present in fstab, Android framework does not use it
+ * to initialize ro.internel.storage_size and ro.frp.pst, but hardcode them
+ * in BoardConfig.mk => in build.prop
+ * To fix this, let's manage them at runtime if needed.
+ */
+void variscite_system_props() {
+    std::string ro_boot_storage_type = property_get("ro.boot.storage_type");
+    std::string ro_frp_pst = property_get("ro.frp.pst");
+    std::string ro_hardware = property_get("ro.hardware");
+
+    if ((ro_boot_storage_type == "sd") || (!ro_frp_pst.empty())) {
+        /* already set */
+        return;
+    }
+
+    if (ro_hardware == "var-som-mx6") {
+        property_set("ro.internel.storage_size", "/sys/block/mmcblk0/size");
+        property_set("ro.frp.pst", "/dev/block/mmcblk0p12");
+    } else if (ro_hardware == "var-dart-mx6") {
+        property_set("ro.internel.storage_size", "/sys/block/mmcblk2/size");
+        property_set("ro.frp.pst", "/dev/block/mmcblk2p12");
+    }
+}
+
 void load_system_props() {
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD, NULL);
     load_properties_from_file(PROP_PATH_VENDOR_BUILD, NULL);
     load_properties_from_file(PROP_PATH_FACTORY, "ro.*");
     load_recovery_id_prop();
+    variscite_system_props();
 }
 
 void start_property_service() {
